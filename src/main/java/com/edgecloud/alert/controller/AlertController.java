@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/alerts")
@@ -30,5 +31,10 @@ public class AlertController {
             @Valid @RequestBody CreateAlertRequest request) {
 
         return alertService.createAlert(request);
+    }
+
+    @PutMapping("/{id}/resolve")
+    public AlertResponse resolveAlert(@PathVariable UUID id) {
+        return alertService.resolveAlert(id);
     }
 }

@@ -30,12 +30,24 @@ public class Alert {
     private String status;
 
     @Column(nullable = false)
+    private boolean resolved;
+
+    private LocalDateTime resolvedAt;
+
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     @PrePersist
     public void prePersist() {
         status = "ACTIVE";
+        resolved = false;
         createdAt = LocalDateTime.now();
+    }
+
+    public void resolve() {
+        status = "RESOLVED";
+        resolved = true;
+        resolvedAt = LocalDateTime.now();
     }
 
     public UUID getId() {
@@ -76,6 +88,14 @@ public class Alert {
 
     public String getStatus() {
         return status;
+    }
+
+    public boolean isResolved() {
+        return resolved;
+    }
+
+    public LocalDateTime getResolvedAt() {
+        return resolvedAt;
     }
 
     public LocalDateTime getCreatedAt() {

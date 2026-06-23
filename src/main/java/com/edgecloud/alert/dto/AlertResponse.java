@@ -12,6 +12,8 @@ public record AlertResponse(
         String message,
         String sourceService,
         String status,
+        boolean resolved,
+        LocalDateTime resolvedAt,
         LocalDateTime createdAt
 ) {
 }
