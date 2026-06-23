@@ -6,6 +6,8 @@ import com.edgecloud.alert.entity.Alert;
 import com.edgecloud.alert.repository.AlertRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class AlertServiceImpl implements AlertService {
 
@@ -13,6 +15,14 @@ public class AlertServiceImpl implements AlertService {
 
     public AlertServiceImpl(AlertRepository alertRepository) {
         this.alertRepository = alertRepository;
+    }
+
+    @Override
+    public List<AlertResponse> getActiveAlerts() {
+        return alertRepository.findByStatusOrderByCreatedAtDesc("ACTIVE")
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
