@@ -7,6 +7,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/alerts")
 public class AlertController {
@@ -15,6 +17,11 @@ public class AlertController {
 
     public AlertController(AlertService alertService) {
         this.alertService = alertService;
+    }
+
+    @GetMapping
+    public List<AlertResponse> getActiveAlerts() {
+        return alertService.getActiveAlerts();
     }
 
     @PostMapping
