@@ -2,6 +2,7 @@ package com.edgecloud.alert.controller;
 
 import com.edgecloud.alert.dto.AlertResponse;
 import com.edgecloud.alert.dto.CreateAlertRequest;
+import com.edgecloud.alert.dto.RuleEvaluationRequest;
 import com.edgecloud.alert.service.AlertService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,13 @@ public class AlertController {
     @GetMapping
     public List<AlertResponse> getActiveAlerts() {
         return alertService.getActiveAlerts();
+    }
+
+    @PostMapping("/evaluate")
+    public List<AlertResponse> evaluateRules(
+            @RequestBody RuleEvaluationRequest request) {
+
+        return alertService.evaluateRules(request);
     }
 
     @PostMapping
