@@ -3,10 +3,12 @@ package com.edgecloud.alert.service;
 import com.edgecloud.alert.dto.AlertResponse;
 import com.edgecloud.alert.dto.CreateAlertRequest;
 import com.edgecloud.alert.entity.Alert;
+import com.edgecloud.alert.exception.AlertNotFoundException;
 import com.edgecloud.alert.repository.AlertRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class AlertServiceImpl implements AlertService {
@@ -38,6 +40,20 @@ public class AlertServiceImpl implements AlertService {
         return toResponse(saved);
     }
 
+    @Override
+    public AlertResponse resolveAlert(UUID id) {
+        Alert alert = alertRepository.findById(id)
+                .orElseThrow(() -> new AlertNotFoundException(
+                        "Alert not found: " + id
+                ));
+
+        alert.resolve();
+
+        Alert saved = alertRepository.save(alert);
+
+        return toResponse(saved);
+    }
+
     private AlertResponse toResponse(Alert alert) {
         return new AlertResponse(
                 alert.getId(),
@@ -46,6 +62,8 @@ public class AlertServiceImpl implements AlertService {
                 alert.getMessage(),
                 alert.getSourceService(),
                 alert.getStatus(),
+                alert.isResolved(),
+                alert.getResolvedAt(),
                 alert.getCreatedAt()
         );
     }
