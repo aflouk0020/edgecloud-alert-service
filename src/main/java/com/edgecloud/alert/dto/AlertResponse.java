@@ -14,6 +14,7 @@ public record AlertResponse(
         String status,
         boolean resolved,
         LocalDateTime resolvedAt,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String rootCauseSuggestion
 ) {
 }
