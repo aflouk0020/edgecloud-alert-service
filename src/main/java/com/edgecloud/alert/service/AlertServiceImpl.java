@@ -8,6 +8,7 @@ import com.edgecloud.alert.entity.Severity;
 import com.edgecloud.alert.entity.Alert;
 import com.edgecloud.alert.exception.AlertNotFoundException;
 import com.edgecloud.alert.repository.AlertRepository;
+import com.edgecloud.alert.util.RootCauseSuggestionResolver;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -143,7 +144,8 @@ public class AlertServiceImpl implements AlertService {
                 alert.getStatus(),
                 alert.isResolved(),
                 alert.getResolvedAt(),
-                alert.getCreatedAt()
+                alert.getCreatedAt(),
+                RootCauseSuggestionResolver.resolve(alert.getAlertType())
         );
     }
 }
