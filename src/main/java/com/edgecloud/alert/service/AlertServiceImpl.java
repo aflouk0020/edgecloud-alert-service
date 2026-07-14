@@ -1,6 +1,7 @@
 package com.edgecloud.alert.service;
 
 import com.edgecloud.alert.dto.AlertResponse;
+import com.edgecloud.alert.dto.AlertSummaryResponse;
 import com.edgecloud.alert.dto.CreateAlertRequest;
 import com.edgecloud.alert.dto.RuleEvaluationRequest;
 import com.edgecloud.alert.entity.AlertType;
@@ -31,6 +32,18 @@ public class AlertServiceImpl implements AlertService {
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Override
+    public AlertSummaryResponse getAlertSummary() {
+        return new AlertSummaryResponse(
+                alertRepository.count(),
+                alertRepository.countByStatus("ACTIVE"),
+                alertRepository.countByStatus("RESOLVED"),
+                alertRepository.countBySeverity(Severity.LOW),
+                alertRepository.countBySeverity(Severity.MEDIUM),
+                alertRepository.countBySeverity(Severity.HIGH)
+        );
     }
 
     @Override
