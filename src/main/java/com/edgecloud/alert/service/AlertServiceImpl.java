@@ -1,5 +1,6 @@
 package com.edgecloud.alert.service;
 
+import com.edgecloud.alert.config.AlertThresholdProperties;
 import com.edgecloud.alert.dto.AlertResponse;
 import com.edgecloud.alert.dto.AlertSummaryResponse;
 import com.edgecloud.alert.dto.CreateAlertRequest;
@@ -18,12 +19,17 @@ import java.util.UUID;
 @Service
 public class AlertServiceImpl implements AlertService {
 
-    private static final long HIGH_LATENCY_THRESHOLD_MS = 1000;
-
     private final AlertRepository alertRepository;
+    private final AlertThresholdProperties thresholdProperties;
+    private final NotificationService notificationService;
 
-    public AlertServiceImpl(AlertRepository alertRepository) {
+    public AlertServiceImpl(
+            AlertRepository alertRepository,
+            AlertThresholdProperties thresholdProperties,
+            NotificationService notificationService) {
         this.alertRepository = alertRepository;
+        this.thresholdProperties = thresholdProperties;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -65,7 +71,7 @@ public class AlertServiceImpl implements AlertService {
         }
 
         if (request.responseTimeMs() != null &&
-                request.responseTimeMs() > HIGH_LATENCY_THRESHOLD_MS) {
+                request.responseTimeMs() > thresholdProperties.highLatencyThresholdMs()) {
 
             generated.add(
                     createIfNotExists(
@@ -102,6 +108,10 @@ public class AlertServiceImpl implements AlertService {
 
         Alert saved = alertRepository.save(alert);
 
+        if (saved.getSeverity() == Severity.HIGH) {
+            notificationService.prepareNotification(saved);
+        }
+
         return toResponse(saved);
     }
 
@@ -115,6 +125,10 @@ public class AlertServiceImpl implements AlertService {
         alert.resolve();
 
         Alert saved = alertRepository.save(alert);
+
+        if (saved.getSeverity() == Severity.HIGH) {
+            notificationService.prepareNotification(saved);
+        }
 
         return toResponse(saved);
     }
