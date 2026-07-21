@@ -3,6 +3,7 @@ package com.edgecloud.alert.service;
 import com.edgecloud.alert.config.AlertThresholdProperties;
 import com.edgecloud.alert.dto.AlertResponse;
 import com.edgecloud.alert.dto.AlertSummaryResponse;
+import com.edgecloud.alert.dto.CreateAlertRequest;
 import com.edgecloud.alert.dto.RuleEvaluationRequest;
 import com.edgecloud.alert.entity.Alert;
 import com.edgecloud.alert.entity.AlertType;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,13 +31,17 @@ class AlertServiceImplTest {
     @Mock
     private AlertRepository alertRepository;
 
+    @Mock
+    private NotificationService notificationService;
+
     private AlertServiceImpl alertService;
 
     @BeforeEach
     void setUp() {
         alertService = new AlertServiceImpl(
                 alertRepository,
-                new AlertThresholdProperties(1000)
+                new AlertThresholdProperties(1000),
+                notificationService
         );
     }
 
@@ -93,11 +99,63 @@ class AlertServiceImplTest {
     }
 
     @Test
+    void preparesNotificationForHighSeverityAlert() {
+
+        when(alertRepository.save(any(Alert.class)))
+                .thenAnswer(invocation -> {
+                    Alert alert = invocation.getArgument(0);
+                    alert.prePersist();
+                    return alert;
+                });
+
+        CreateAlertRequest request =
+                new CreateAlertRequest(
+                        AlertType.SERVICE_DOWN,
+                        Severity.HIGH,
+                        "Service is DOWN",
+                        "device-service"
+                );
+
+        alertService.createAlert(request);
+
+        verify(notificationService)
+                .prepareNotification(any(Alert.class));
+    }
+
+
+    @Test
+    void doesNotPrepareNotificationForMediumSeverityAlert() {
+
+        when(alertRepository.save(any(Alert.class)))
+                .thenAnswer(invocation -> {
+                    Alert alert = invocation.getArgument(0);
+                    alert.prePersist();
+                    return alert;
+                });
+
+        CreateAlertRequest request =
+                new CreateAlertRequest(
+                        AlertType.HIGH_LATENCY,
+                        Severity.MEDIUM,
+                        "High latency detected",
+                        "monitoring-service"
+                );
+
+        alertService.createAlert(request);
+
+        verify(notificationService, never())
+                .prepareNotification(any(Alert.class));
+    }
+
+
+
+    @Test
     void doesNotCreateLatencyAlertWhenConfiguredThresholdIsNotExceeded() {
         AlertServiceImpl serviceWithHigherThreshold =
                 new AlertServiceImpl(
                         alertRepository,
-                        new AlertThresholdProperties(2000)
+                        new AlertThresholdProperties(2000),
+                        notificationService
                 );
 
         RuleEvaluationRequest request = new RuleEvaluationRequest(

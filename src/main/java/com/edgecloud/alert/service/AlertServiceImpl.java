@@ -21,12 +21,15 @@ public class AlertServiceImpl implements AlertService {
 
     private final AlertRepository alertRepository;
     private final AlertThresholdProperties thresholdProperties;
+    private final NotificationService notificationService;
 
     public AlertServiceImpl(
             AlertRepository alertRepository,
-            AlertThresholdProperties thresholdProperties) {
+            AlertThresholdProperties thresholdProperties,
+            NotificationService notificationService) {
         this.alertRepository = alertRepository;
         this.thresholdProperties = thresholdProperties;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -105,6 +108,10 @@ public class AlertServiceImpl implements AlertService {
 
         Alert saved = alertRepository.save(alert);
 
+        if (saved.getSeverity() == Severity.HIGH) {
+            notificationService.prepareNotification(saved);
+        }
+
         return toResponse(saved);
     }
 
@@ -118,6 +125,10 @@ public class AlertServiceImpl implements AlertService {
         alert.resolve();
 
         Alert saved = alertRepository.save(alert);
+
+        if (saved.getSeverity() == Severity.HIGH) {
+            notificationService.prepareNotification(saved);
+        }
 
         return toResponse(saved);
     }
