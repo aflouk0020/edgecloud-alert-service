@@ -33,3 +33,6 @@ management:
   endpoint:
     health:
       show-details: always
+edgecloud:
+  alert:
+    high-latency-threshold-ms: ${HIGH_LATENCY_MS:1000}

@@ -1,5 +1,6 @@
 package com.edgecloud.alert.service;
 
+import com.edgecloud.alert.config.AlertThresholdProperties;
 import com.edgecloud.alert.dto.AlertResponse;
 import com.edgecloud.alert.dto.AlertSummaryResponse;
 import com.edgecloud.alert.dto.CreateAlertRequest;
@@ -18,12 +19,14 @@ import java.util.UUID;
 @Service
 public class AlertServiceImpl implements AlertService {
 
-    private static final long HIGH_LATENCY_THRESHOLD_MS = 1000;
-
     private final AlertRepository alertRepository;
+    private final AlertThresholdProperties thresholdProperties;
 
-    public AlertServiceImpl(AlertRepository alertRepository) {
+    public AlertServiceImpl(
+            AlertRepository alertRepository,
+            AlertThresholdProperties thresholdProperties) {
         this.alertRepository = alertRepository;
+        this.thresholdProperties = thresholdProperties;
     }
 
     @Override
@@ -65,7 +68,7 @@ public class AlertServiceImpl implements AlertService {
         }
 
         if (request.responseTimeMs() != null &&
-                request.responseTimeMs() > HIGH_LATENCY_THRESHOLD_MS) {
+                request.responseTimeMs() > thresholdProperties.highLatencyThresholdMs()) {
 
             generated.add(
                     createIfNotExists(
