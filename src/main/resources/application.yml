@@ -19,6 +19,9 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
 
+  flyway:
+    baseline-on-migrate: true
+
 eureka:
   client:
     service-url:
@@ -34,5 +37,9 @@ management:
     health:
       show-details: always
 edgecloud:
+  security:
+    jwt-secret: ${EDGECLOUD_JWT_SECRET:edgecloud-monitor-development-secret-key-for-jwt-token-generation}
+  downstream:
+    project-base-url: ${EDGE_CLOUD_PROJECT_URL:http://localhost:8086}
   alert:
     high-latency-threshold-ms: ${HIGH_LATENCY_MS:1000}
