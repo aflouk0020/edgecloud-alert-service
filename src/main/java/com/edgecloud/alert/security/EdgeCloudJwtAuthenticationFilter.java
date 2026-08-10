@@ -24,7 +24,8 @@ public class EdgeCloudJwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/v2/")
+        return !(request.getRequestURI().startsWith("/api/v2/")
+            || request.getRequestURI().startsWith("/internal/"))
                 || request.getRequestURI().startsWith("/actuator/health")
                 || request.getRequestURI().startsWith("/actuator/info");
     }

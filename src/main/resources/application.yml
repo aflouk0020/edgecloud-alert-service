@@ -43,3 +43,6 @@ edgecloud:
     project-base-url: ${EDGE_CLOUD_PROJECT_URL:http://localhost:8086}
   alert:
     high-latency-threshold-ms: ${HIGH_LATENCY_MS:1000}
+    evaluation:
+      duplicate-maximum-size: ${ALERT_EVALUATION_DUPLICATE_MAXIMUM_SIZE:10000}
+      duplicate-ttl-seconds: ${ALERT_EVALUATION_DUPLICATE_TTL_SECONDS:30}
