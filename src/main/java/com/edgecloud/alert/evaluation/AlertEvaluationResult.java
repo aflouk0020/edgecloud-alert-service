@@ -10,6 +10,7 @@ import com.edgecloud.alert.entity.Severity;
 
 public record AlertEvaluationResult(
         UUID ruleId,
+        String ruleName,
         UUID projectId,
         AlertEvaluationSourceType sourceType,
         String sourceId,

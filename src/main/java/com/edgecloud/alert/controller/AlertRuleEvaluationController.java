@@ -2,7 +2,7 @@ package com.edgecloud.alert.controller;
 
 import com.edgecloud.alert.evaluation.AlertEvaluationInput;
 import com.edgecloud.alert.evaluation.AlertEvaluationResponse;
-import com.edgecloud.alert.evaluation.AlertRuleEvaluationService;
+import com.edgecloud.alert.evaluation.AlertEvaluationOrchestrationService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,9 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/internal/alert-rule-evaluations")
 public class AlertRuleEvaluationController {
 
-    private final AlertRuleEvaluationService evaluationService;
+    private final AlertEvaluationOrchestrationService evaluationService;
 
-    public AlertRuleEvaluationController(AlertRuleEvaluationService evaluationService) {
+    public AlertRuleEvaluationController(AlertEvaluationOrchestrationService evaluationService) {
         this.evaluationService = evaluationService;
     }
 

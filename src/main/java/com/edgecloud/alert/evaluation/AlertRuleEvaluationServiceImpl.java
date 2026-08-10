@@ -85,7 +85,7 @@ public class AlertRuleEvaluationServiceImpl implements AlertRuleEvaluationServic
         boolean triggered = comparisonService.compare(
                 input.observedValue(), rule.getThresholdValue(), rule.getComparisonOperator());
         return new AlertEvaluationResult(
-                rule.getId(), input.projectId(), input.sourceType(), input.sourceId(), input.metricType(),
+                rule.getId(), rule.getName(), input.projectId(), input.sourceType(), input.sourceId(), input.metricType(),
                 input.observedValue(), rule.getThresholdValue(), rule.getComparisonOperator(),
                 rule.getSeverity(), triggered, evaluatedAt);
     }

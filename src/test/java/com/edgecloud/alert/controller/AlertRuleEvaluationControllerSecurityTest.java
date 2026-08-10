@@ -22,7 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.edgecloud.alert.evaluation.AlertEvaluationResponse;
-import com.edgecloud.alert.evaluation.AlertRuleEvaluationService;
+import com.edgecloud.alert.evaluation.AlertEvaluationOrchestrationService;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -37,7 +37,7 @@ class AlertRuleEvaluationControllerSecurityTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private AlertRuleEvaluationService evaluationService;
+    private AlertEvaluationOrchestrationService evaluationService;
 
     @Test
     void missingJwtReturns401() throws Exception {
