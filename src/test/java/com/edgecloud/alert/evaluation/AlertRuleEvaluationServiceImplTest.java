@@ -71,6 +71,8 @@ class AlertRuleEvaluationServiceImplTest {
         assertThat(response.triggeredCount()).isEqualTo(1);
         assertThat(response.results()).extracting(AlertEvaluationResult::ruleId)
                 .containsExactly(projectRule.getId(), deviceRule.getId());
+        assertThat(response.results()).extracting(AlertEvaluationResult::ruleName)
+                .containsExactly("rule-" + projectRule.getId(), "rule-" + deviceRule.getId());
     }
 
     @Test
@@ -215,6 +217,7 @@ class AlertRuleEvaluationServiceImplTest {
                                                    BigDecimal threshold) {
         AlertRule rule = mock(AlertRule.class);
         when(rule.getId()).thenReturn(id);
+        org.mockito.Mockito.lenient().when(rule.getName()).thenReturn("rule-" + id);
         when(rule.getProjectId()).thenReturn(projectId);
                 when(rule.getMetricType()).thenReturn(metricType);
         when(rule.getThresholdValue()).thenReturn(threshold);

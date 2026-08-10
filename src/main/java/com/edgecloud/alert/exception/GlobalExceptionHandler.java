@@ -75,6 +75,12 @@ public class GlobalExceptionHandler {
         return error(400, "Bad Request", ex.getMessage());
     }
 
+    @ExceptionHandler(AlertEventValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleAlertEventValidation(AlertEventValidationException ex) {
+        return error(400, "Bad Request", ex.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Map<String, Object> handleUnexpectedException() {
