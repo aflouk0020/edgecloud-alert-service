@@ -81,6 +81,18 @@ public class GlobalExceptionHandler {
         return error(400, "Bad Request", ex.getMessage());
     }
 
+    @ExceptionHandler({AlertOwnershipConflictException.class, InvalidAlertLifecycleTransitionException.class})
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, Object> handleAlertOwnershipConflict(RuntimeException ex) {
+        return error(409, "Conflict", ex.getMessage());
+    }
+
+    @ExceptionHandler(AlertOwnershipReleaseForbiddenException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Map<String, Object> handleAlertOwnershipReleaseForbidden() {
+        return error(403, "Forbidden", "Access denied");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Map<String, Object> handleUnexpectedException() {

@@ -1,5 +1,6 @@
 package com.edgecloud.alert.service;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,15 +43,17 @@ public class AlertEventGenerationServiceImpl implements AlertEventGenerationServ
                     result.operator().name(),
                     result.severity().name(),
                     result.evaluatedAt());
-            AlertEventResponse persisted = repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatus(
+            AlertEventResponse persisted = repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
                             result.projectId(), result.ruleId(), sourceType, sourceId,
-                            result.metricType(), com.edgecloud.alert.entity.AlertEventStatus.OPEN)
+                            result.metricType(), List.of(
+                                    com.edgecloud.alert.entity.AlertEventStatus.OPEN,
+                                    com.edgecloud.alert.entity.AlertEventStatus.ACKNOWLEDGED))
                     .map(AlertEventResponse::from)
-                    .orElseThrow(() -> new IllegalStateException("OPEN alert event was not available after upsert"));
+                    .orElseThrow(() -> new IllegalStateException("Active alert event was not available after upsert"));
             return Optional.of(persisted);
         }
 
-        return repository.findOpenForUpdate(
+        return repository.findActiveForUpdate(
                         result.projectId(), result.ruleId(), sourceType, sourceId, result.metricType())
                 .map(event -> {
                     event.resolve(result.evaluatedAt());

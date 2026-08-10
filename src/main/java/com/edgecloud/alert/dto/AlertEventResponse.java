@@ -27,6 +27,10 @@ public record AlertEventResponse(
         Instant triggeredAt,
         Instant lastObservedAt,
         Instant resolvedAt,
+        UUID ownerUserId,
+        String ownerDisplayName,
+        Instant acknowledgedAt,
+        Instant ownershipChangedAt,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -36,6 +40,8 @@ public record AlertEventResponse(
                 event.getSourceType(), event.getSourceId(), event.getMetricType(), event.getObservedValue(),
                 event.getThresholdValue(), event.getComparisonOperator(), event.getSeverity(), event.getStatus(),
                 event.getTriggeredAt(), event.getLastObservedAt(), event.getResolvedAt(),
+                event.getOwnerUserId(), event.getOwnerDisplayName(), event.getAcknowledgedAt(),
+                event.getOwnershipChangedAt(),
                 event.getCreatedAt(), event.getUpdatedAt());
     }
 }

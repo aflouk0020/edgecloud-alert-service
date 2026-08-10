@@ -23,6 +23,7 @@ public final class AlertEventSpecifications {
                 if (filter.sourceId() != null && !filter.sourceId().isBlank()) {
                     predicates.add(builder.equal(root.get("sourceId"), filter.sourceId().trim()));
                 }
+                if (filter.ownerId() != null) predicates.add(builder.equal(root.get("ownerUserId"), filter.ownerId()));
                 if (filter.from() != null) predicates.add(builder.greaterThanOrEqualTo(root.get("triggeredAt"), filter.from()));
                 if (filter.to() != null) predicates.add(builder.lessThanOrEqualTo(root.get("triggeredAt"), filter.to()));
             }
