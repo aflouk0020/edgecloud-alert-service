@@ -1,7 +1,6 @@
 package com.edgecloud.alert.entity;
 
-public enum AlertEventStatus {
-    OPEN,
+public enum AlertEventOwnershipAction {
     ACKNOWLEDGED,
-    RESOLVED
+    RELEASED
 }

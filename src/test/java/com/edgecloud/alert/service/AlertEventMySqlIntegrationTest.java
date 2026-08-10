@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ExecutionException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,13 +27,16 @@ import com.edgecloud.alert.dto.AlertEventFilter;
 import com.edgecloud.alert.dto.AlertEventResponse;
 import com.edgecloud.alert.entity.AlertEventSourceType;
 import com.edgecloud.alert.entity.AlertEventStatus;
+import com.edgecloud.alert.entity.AlertEventOwnershipAction;
 import com.edgecloud.alert.entity.AlertRuleComparisonOperator;
 import com.edgecloud.alert.entity.AlertRuleMetricType;
 import com.edgecloud.alert.entity.Severity;
 import com.edgecloud.alert.evaluation.AlertEvaluationResult;
 import com.edgecloud.alert.evaluation.AlertEvaluationSourceType;
 import com.edgecloud.alert.repository.AlertEventRepository;
+import com.edgecloud.alert.repository.AlertEventOwnershipHistoryRepository;
 import com.edgecloud.alert.repository.AlertEventSpecifications;
+import com.edgecloud.alert.exception.AlertOwnershipConflictException;
 
 @Testcontainers
 @SpringBootTest(properties = {
@@ -78,9 +82,107 @@ class AlertEventMySqlIntegrationTest {
     @Autowired
     private AlertEventRepository repository;
 
+    @Autowired
+    private AlertEventOwnershipHistoryRepository historyRepository;
+
+    @Autowired
+    private AlertOwnershipService ownershipService;
+
     @BeforeEach
     void clearEvents() {
+        historyRepository.deleteAll();
         repository.deleteAll();
+    }
+
+    @Test
+    void acknowledgedAlertRemainsUniqueActiveAndResolvesWithoutLosingOwnership() {
+        UUID ownerId = UUID.randomUUID();
+        AlertEventResponse open = generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        AlertEventResponse acknowledged = ownershipService.acknowledge(
+                PROJECT_ID, open.alertId(), ownerId, "engineer@example.com");
+        assertThat(acknowledged.status()).isEqualTo(AlertEventStatus.ACKNOWLEDGED);
+        assertThat(repository.findById(open.alertId()).orElseThrow().getOpenMarker()).isEqualTo(1);
+
+        AlertEventResponse repeated = generationService.process(
+                result(RULE_ID, true, BASE_TIME.plusSeconds(60))).orElseThrow();
+        assertThat(repeated.alertId()).isEqualTo(open.alertId());
+        assertThat(repeated.status()).isEqualTo(AlertEventStatus.ACKNOWLEDGED);
+        assertThat(repeated.ownerUserId()).isEqualTo(ownerId);
+        assertThat(repository.count()).isEqualTo(1);
+
+        AlertEventResponse resolved = generationService.process(
+                result(RULE_ID, false, BASE_TIME.plusSeconds(120))).orElseThrow();
+        assertThat(resolved.status()).isEqualTo(AlertEventStatus.RESOLVED);
+        assertThat(resolved.ownerUserId()).isEqualTo(ownerId);
+        assertThat(resolved.acknowledgedAt()).isEqualTo(acknowledged.acknowledgedAt());
+
+        AlertEventResponse retriggered = generationService.process(
+                result(RULE_ID, true, BASE_TIME.plusSeconds(180))).orElseThrow();
+        assertThat(retriggered.alertId()).isNotEqualTo(open.alertId());
+        assertThat(retriggered.status()).isEqualTo(AlertEventStatus.OPEN);
+        assertThat(retriggered.ownerUserId()).isNull();
+        assertThat(retriggered.acknowledgedAt()).isNull();
+    }
+
+    @Test
+    void ownershipHistoryIsProjectScopedAndDeterministicallyOrdered() {
+        UUID ownerId = UUID.randomUUID();
+        AlertEventResponse open = generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        ownershipService.acknowledge(PROJECT_ID, open.alertId(), ownerId, "engineer@example.com");
+        ownershipService.release(PROJECT_ID, open.alertId(), ownerId);
+
+        var history = historyRepository.findByProjectIdAndAlertEventIdOrderByChangedAtAscIdAsc(
+                PROJECT_ID, open.alertId());
+        assertThat(history).extracting(item -> item.getAction())
+                .containsExactly(AlertEventOwnershipAction.ACKNOWLEDGED, AlertEventOwnershipAction.RELEASED);
+        assertThat(historyRepository.findByProjectIdAndAlertEventIdOrderByChangedAtAscIdAsc(
+                UUID.randomUUID(), open.alertId())).isEmpty();
+    }
+
+    @Test
+    void concurrentDifferentOwnersCannotSilentlyTakeOwnership() throws Exception {
+        AlertEventResponse open = generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        UUID firstOwner = UUID.randomUUID();
+        UUID secondOwner = UUID.randomUUID();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            List<Future<AlertEventResponse>> attempts = List.of(
+                    executor.submit(() -> acknowledgeAfterLatch(open.alertId(), firstOwner, ready, start)),
+                    executor.submit(() -> acknowledgeAfterLatch(open.alertId(), secondOwner, ready, start)));
+            ready.await();
+            start.countDown();
+
+            int successes = 0;
+            int conflicts = 0;
+            for (Future<AlertEventResponse> attempt : attempts) {
+                try {
+                    AlertEventResponse response = attempt.get();
+                    assertThat(response.status()).isEqualTo(AlertEventStatus.ACKNOWLEDGED);
+                    successes++;
+                } catch (ExecutionException ex) {
+                    assertThat(ex.getCause()).isInstanceOf(AlertOwnershipConflictException.class);
+                    conflicts++;
+                }
+            }
+            assertThat(successes).isEqualTo(1);
+            assertThat(conflicts).isEqualTo(1);
+        }
+
+        var persisted = repository.findById(open.alertId()).orElseThrow();
+        assertThat(persisted.getStatus()).isEqualTo(AlertEventStatus.ACKNOWLEDGED);
+        assertThat(persisted.getOwnerUserId()).isIn(firstOwner, secondOwner);
+        assertThat(historyRepository.findByProjectIdAndAlertEventIdOrderByChangedAtAscIdAsc(
+                PROJECT_ID, open.alertId())).hasSize(1);
+    }
+
+    private AlertEventResponse acknowledgeAfterLatch(UUID alertId, UUID ownerId,
+                                                      CountDownLatch ready, CountDownLatch start)
+            throws InterruptedException {
+        ready.countDown();
+        start.await();
+        return ownershipService.acknowledge(PROJECT_ID, alertId, ownerId, ownerId.toString());
     }
 
     @Test
@@ -182,7 +284,8 @@ class AlertEventMySqlIntegrationTest {
 
         seedResolvedHistory(50);
         AlertEventFilter filter = new AlertEventFilter(AlertEventStatus.RESOLVED, Severity.HIGH,
-                AlertEventSourceType.DEVICE, SOURCE_ID, BASE_TIME.minusSeconds(1), BASE_TIME.plusSeconds(10_000));
+                AlertEventSourceType.DEVICE, SOURCE_ID, null,
+                BASE_TIME.minusSeconds(1), BASE_TIME.plusSeconds(10_000));
         measure("filtered project page query", iteration -> {
             var page = queryService.list(PROJECT_ID, filter, 0, 50, "DESC");
             assertThat(page.alerts()).hasSize(50);

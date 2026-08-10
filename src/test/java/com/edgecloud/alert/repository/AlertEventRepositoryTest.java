@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,9 +36,10 @@ class AlertEventRepositoryTest {
         AlertEvent event = repository.saveAndFlush(event(projectId, ruleId, "device-1",
                 AlertEventStatus.OPEN, Severity.HIGH, Instant.parse("2026-08-10T10:00:00Z")));
 
-        assertThat(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatus(
+        assertThat(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
                 projectId, ruleId, AlertEventSourceType.DEVICE, "device-1",
-                AlertRuleMetricType.CPU_USAGE, AlertEventStatus.OPEN)).contains(event);
+                AlertRuleMetricType.CPU_USAGE, List.of(AlertEventStatus.OPEN, AlertEventStatus.ACKNOWLEDGED)))
+                .contains(event);
         assertThat(repository.findByIdAndProjectId(event.getId(), projectId)).contains(event);
         assertThat(repository.findByIdAndProjectId(event.getId(), UUID.randomUUID())).isEmpty();
     }
@@ -57,12 +59,42 @@ class AlertEventRepositoryTest {
 
         AlertEventFilter filter = new AlertEventFilter(
                 AlertEventStatus.RESOLVED, Severity.HIGH, AlertEventSourceType.DEVICE, "device-1",
+                null,
                 includedAt.minusSeconds(1), includedAt.plusSeconds(1));
         var page = repository.findAll(
                 AlertEventSpecifications.forProject(projectId, filter),
                 PageRequest.of(0, 20, Sort.by(Sort.Order.desc("triggeredAt"), Sort.Order.asc("id"))));
 
         assertThat(page.getContent()).containsExactly(included);
+    }
+
+    @Test
+    void ownerFilterIsProjectScopedExcludesUnownedAndComposesWithExistingFilters() {
+        UUID projectId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Instant triggeredAt = Instant.parse("2026-08-10T10:00:00Z");
+        AlertEvent ownedMatch = event(projectId, UUID.randomUUID(), "device-1",
+                AlertEventStatus.ACKNOWLEDGED, Severity.HIGH, triggeredAt);
+        ownedMatch.setOwnerUserId(ownerId);
+        repository.save(ownedMatch);
+        repository.save(event(projectId, UUID.randomUUID(), "device-1",
+                AlertEventStatus.OPEN, Severity.HIGH, triggeredAt.plusSeconds(1)));
+        AlertEvent differentOwner = event(projectId, UUID.randomUUID(), "device-1",
+                AlertEventStatus.ACKNOWLEDGED, Severity.HIGH, triggeredAt.plusSeconds(2));
+        differentOwner.setOwnerUserId(UUID.randomUUID());
+        repository.save(differentOwner);
+        AlertEvent otherProject = event(UUID.randomUUID(), UUID.randomUUID(), "device-1",
+                AlertEventStatus.ACKNOWLEDGED, Severity.HIGH, triggeredAt);
+        otherProject.setOwnerUserId(ownerId);
+        repository.save(otherProject);
+        repository.flush();
+
+        AlertEventFilter filter = new AlertEventFilter(
+                AlertEventStatus.ACKNOWLEDGED, Severity.HIGH, AlertEventSourceType.DEVICE,
+                "device-1", ownerId, triggeredAt.minusSeconds(1), triggeredAt.plusSeconds(10));
+        var result = repository.findAll(AlertEventSpecifications.forProject(projectId, filter));
+
+        assertThat(result).containsExactly(ownedMatch);
     }
 
     @Test
@@ -78,7 +110,7 @@ class AlertEventRepositoryTest {
         repository.flush();
 
         var firstPage = repository.findAll(
-                AlertEventSpecifications.forProject(projectId, new AlertEventFilter(null, null, null, null, null, null)),
+                AlertEventSpecifications.forProject(projectId, new AlertEventFilter(null, null, null, null, null, null, null)),
                 PageRequest.of(0, 2, Sort.by(Sort.Order.desc("triggeredAt"), Sort.Order.asc("id"))));
         var secondPage = repository.findAll(
                 AlertEventSpecifications.forProject(projectId, null),

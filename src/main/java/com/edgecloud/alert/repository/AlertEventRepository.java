@@ -2,6 +2,7 @@ package com.edgecloud.alert.repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,9 +24,14 @@ public interface AlertEventRepository extends JpaRepository<AlertEvent, UUID>, J
 
     Optional<AlertEvent> findByIdAndProjectId(UUID id, UUID projectId);
 
-    Optional<AlertEvent> findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatus(
+    Optional<AlertEvent> findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
             UUID projectId, UUID alertRuleId, AlertEventSourceType sourceType, String sourceId,
-            AlertRuleMetricType metricType, AlertEventStatus status);
+            AlertRuleMetricType metricType, List<AlertEventStatus> statuses);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select event from AlertEvent event where event.id = :alertId and event.projectId = :projectId")
+    Optional<AlertEvent> findByIdAndProjectIdForUpdate(
+            @Param("alertId") UUID alertId, @Param("projectId") UUID projectId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
@@ -35,9 +41,12 @@ public interface AlertEventRepository extends JpaRepository<AlertEvent, UUID>, J
               and event.sourceType = :sourceType
               and event.sourceId = :sourceId
               and event.metricType = :metricType
-              and event.status = com.edgecloud.alert.entity.AlertEventStatus.OPEN
+              and event.status in (
+                  com.edgecloud.alert.entity.AlertEventStatus.OPEN,
+                  com.edgecloud.alert.entity.AlertEventStatus.ACKNOWLEDGED
+              )
             """)
-    Optional<AlertEvent> findOpenForUpdate(
+    Optional<AlertEvent> findActiveForUpdate(
             @Param("projectId") UUID projectId,
             @Param("alertRuleId") UUID alertRuleId,
             @Param("sourceType") AlertEventSourceType sourceType,

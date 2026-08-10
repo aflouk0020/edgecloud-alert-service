@@ -61,6 +61,8 @@ class AlertEventQueryServiceImplTest {
         assertThat(pageable.getValue().getSort().getOrderFor("triggeredAt").isDescending()).isTrue();
         assertThat(pageable.getValue().getSort().getOrderFor("id").isAscending()).isTrue();
         assertThat(response.alerts()).hasSize(1);
+        assertThat(response.alerts().getFirst().ownerUserId()).isEqualTo(storedEvent.getOwnerUserId());
+        assertThat(response.alerts().getFirst().acknowledgedAt()).isEqualTo(storedEvent.getAcknowledgedAt());
     }
 
     @Test
@@ -70,6 +72,7 @@ class AlertEventQueryServiceImplTest {
 
         service.list(UUID.randomUUID(), new AlertEventFilter(
                 AlertEventStatus.OPEN, Severity.HIGH, AlertEventSourceType.DEVICE, "device-1",
+                null,
                 Instant.parse("2026-08-10T09:00:00Z"), Instant.parse("2026-08-10T10:00:00Z")),
                 2, 100, "ASC");
 
@@ -92,10 +95,10 @@ class AlertEventQueryServiceImplTest {
         assertThatThrownBy(() -> service.list(projectId, null, 0, 20, "SIDEWAYS"))
                 .isInstanceOf(AlertEventValidationException.class);
         assertThatThrownBy(() -> service.list(projectId,
-                new AlertEventFilter(null, null, null, " ", null, null), 0, 20, "DESC"))
+                new AlertEventFilter(null, null, null, " ", null, null, null), 0, 20, "DESC"))
                 .isInstanceOf(AlertEventValidationException.class);
         assertThatThrownBy(() -> service.list(projectId,
-                new AlertEventFilter(null, null, null, null,
+                new AlertEventFilter(null, null, null, null, null,
                         Instant.parse("2026-08-10T11:00:00Z"), Instant.parse("2026-08-10T10:00:00Z")),
                 0, 20, "DESC")).isInstanceOf(AlertEventValidationException.class);
     }
@@ -136,6 +139,10 @@ class AlertEventQueryServiceImplTest {
         when(event.getComparisonOperator()).thenReturn(AlertRuleComparisonOperator.GREATER_THAN);
         when(event.getSeverity()).thenReturn(Severity.HIGH);
         when(event.getStatus()).thenReturn(AlertEventStatus.OPEN);
+        when(event.getOwnerUserId()).thenReturn(UUID.fromString("30000000-0000-0000-0000-000000000001"));
+        when(event.getOwnerDisplayName()).thenReturn("engineer@example.com");
+        when(event.getAcknowledgedAt()).thenReturn(Instant.parse("2026-08-10T10:01:00Z"));
+        when(event.getOwnershipChangedAt()).thenReturn(Instant.parse("2026-08-10T10:01:00Z"));
         when(event.getTriggeredAt()).thenReturn(Instant.parse("2026-08-10T10:00:00Z"));
         when(event.getLastObservedAt()).thenReturn(Instant.parse("2026-08-10T10:00:00Z"));
         when(event.getCreatedAt()).thenReturn(Instant.parse("2026-08-10T10:00:00Z"));

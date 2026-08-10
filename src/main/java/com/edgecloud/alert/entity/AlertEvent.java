@@ -29,6 +29,7 @@ import jakarta.persistence.UniqueConstraint;
                 @Index(name = "idx_alert_events_project_status", columnList = "project_id,status,triggered_at,id"),
                 @Index(name = "idx_alert_events_project_severity", columnList = "project_id,severity,triggered_at,id"),
                 @Index(name = "idx_alert_events_project_triggered", columnList = "project_id,triggered_at,id"),
+                @Index(name = "idx_alert_events_project_owner", columnList = "project_id,owner_user_id,triggered_at,id"),
                 @Index(name = "idx_alert_events_source", columnList = "source_type,source_id"),
                 @Index(name = "idx_alert_events_rule_status", columnList = "alert_rule_id,status")
         })
@@ -89,6 +90,19 @@ public class AlertEvent {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "owner_user_id", length = 36)
+    private UUID ownerUserId;
+
+    @Column(name = "owner_display_name", length = 200)
+    private String ownerDisplayName;
+
+    @Column(name = "acknowledged_at")
+    private Instant acknowledgedAt;
+
+    @Column(name = "ownership_changed_at")
+    private Instant ownershipChangedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -120,6 +134,24 @@ public class AlertEvent {
         updatedAt = observedAt;
     }
 
+    public void acknowledge(UUID ownerUserId, String ownerDisplayName, Instant changedAt) {
+        status = AlertEventStatus.ACKNOWLEDGED;
+        this.ownerUserId = ownerUserId;
+        this.ownerDisplayName = ownerDisplayName;
+        acknowledgedAt = changedAt;
+        ownershipChangedAt = changedAt;
+        updatedAt = changedAt;
+    }
+
+    public void release(Instant changedAt) {
+        status = AlertEventStatus.OPEN;
+        ownerUserId = null;
+        ownerDisplayName = null;
+        acknowledgedAt = null;
+        ownershipChangedAt = changedAt;
+        updatedAt = changedAt;
+    }
+
     public UUID getId() { return id; }
     public UUID getAlertRuleId() { return alertRuleId; }
     public String getAlertRuleName() { return alertRuleName; }
@@ -135,6 +167,10 @@ public class AlertEvent {
     public Instant getTriggeredAt() { return triggeredAt; }
     public Instant getLastObservedAt() { return lastObservedAt; }
     public Instant getResolvedAt() { return resolvedAt; }
+    public UUID getOwnerUserId() { return ownerUserId; }
+    public String getOwnerDisplayName() { return ownerDisplayName; }
+    public Instant getAcknowledgedAt() { return acknowledgedAt; }
+    public Instant getOwnershipChangedAt() { return ownershipChangedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Integer getOpenMarker() { return openMarker; }
@@ -153,6 +189,10 @@ public class AlertEvent {
     public void setTriggeredAt(Instant triggeredAt) { this.triggeredAt = triggeredAt; }
     public void setLastObservedAt(Instant lastObservedAt) { this.lastObservedAt = lastObservedAt; }
     public void setResolvedAt(Instant resolvedAt) { this.resolvedAt = resolvedAt; }
+    public void setOwnerUserId(UUID ownerUserId) { this.ownerUserId = ownerUserId; }
+    public void setOwnerDisplayName(String ownerDisplayName) { this.ownerDisplayName = ownerDisplayName; }
+    public void setAcknowledgedAt(Instant acknowledgedAt) { this.acknowledgedAt = acknowledgedAt; }
+    public void setOwnershipChangedAt(Instant ownershipChangedAt) { this.ownershipChangedAt = ownershipChangedAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }
