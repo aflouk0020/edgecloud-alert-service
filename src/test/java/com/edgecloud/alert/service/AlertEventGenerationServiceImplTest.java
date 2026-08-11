@@ -14,12 +14,14 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.edgecloud.alert.entity.AlertEvent;
 import com.edgecloud.alert.entity.AlertEventSourceType;
@@ -27,6 +29,7 @@ import com.edgecloud.alert.entity.AlertEventStatus;
 import com.edgecloud.alert.entity.AlertRuleComparisonOperator;
 import com.edgecloud.alert.entity.AlertRuleMetricType;
 import com.edgecloud.alert.entity.Severity;
+import com.edgecloud.alert.entity.NotificationLifecycleEventType;
 import com.edgecloud.alert.evaluation.AlertEvaluationResult;
 import com.edgecloud.alert.evaluation.AlertEvaluationSourceType;
 import com.edgecloud.alert.exception.AlertEvaluationValidationException;
@@ -41,21 +44,33 @@ class AlertEventGenerationServiceImplTest {
 
     @Mock
     private AlertEventRepository repository;
+    @Mock
+    private AlertNotificationOutboxService outboxService;
 
     private AlertEventGenerationService service;
 
     @BeforeEach
     void setUp() {
-        service = new AlertEventGenerationServiceImpl(repository);
+        service = new AlertEventGenerationServiceImpl(repository, outboxService);
     }
 
     @Test
     void triggeredResultCreatesOpenEventWithEvidenceAndDeviceSource() {
         AlertEvaluationResult result = result(true, AlertEvaluationSourceType.DEVICE, "device-1", FIRST_OBSERVED);
         AlertEvent stored = event(AlertEventStatus.OPEN, "device-1", FIRST_OBSERVED);
+        AtomicReference<UUID> insertedId = new AtomicReference<>();
+        when(repository.upsertOpen(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
+                anyString(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), anyString(),
+                anyString(), org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> {
+                    insertedId.set(UUID.fromString(invocation.getArgument(0)));
+                    return 1;
+                });
         when(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
                 PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE, "device-1",
-                AlertRuleMetricType.CPU_USAGE, activeStatuses())).thenReturn(Optional.of(stored));
+                AlertRuleMetricType.CPU_USAGE, activeStatuses())).thenAnswer(invocation -> {
+                    ReflectionTestUtils.setField(stored, "id", insertedId.get());
+                    return Optional.of(stored);
+                });
 
         var response = service.process(result);
 
@@ -69,6 +84,7 @@ class AlertEventGenerationServiceImplTest {
                 anyString(), eq(RULE_ID.toString()), eq("CPU overload"), eq(PROJECT_ID.toString()),
                 eq("DEVICE"), eq("device-1"), eq("CPU_USAGE"), eq(new BigDecimal("95.25")),
                 eq(new BigDecimal("80.00")), eq("GREATER_THAN"), eq("HIGH"), eq(FIRST_OBSERVED));
+        verify(outboxService).enqueue(stored, NotificationLifecycleEventType.OPENED, FIRST_OBSERVED);
     }
 
     @Test
@@ -90,6 +106,7 @@ class AlertEventGenerationServiceImplTest {
                 eq("DEVICE"), eq("device-1"), eq("CPU_USAGE"), eq(new BigDecimal("95.25")),
                 eq(new BigDecimal("80.00")), eq("GREATER_THAN"), eq("HIGH"),
                 org.mockito.ArgumentMatchers.any());
+        verifyNoInteractions(outboxService);
     }
 
     @Test
@@ -120,6 +137,7 @@ class AlertEventGenerationServiceImplTest {
         assertThat(open.getResolvedAt()).isEqualTo(recoveredAt);
         assertThat(open.getLastObservedAt()).isEqualTo(recoveredAt);
         assertThat(open.getUpdatedAt()).isEqualTo(recoveredAt);
+        verify(outboxService).enqueue(open, NotificationLifecycleEventType.RESOLVED, recoveredAt);
     }
 
     @Test

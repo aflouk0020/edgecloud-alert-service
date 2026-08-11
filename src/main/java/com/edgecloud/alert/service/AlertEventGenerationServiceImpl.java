@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.edgecloud.alert.dto.AlertEventResponse;
 import com.edgecloud.alert.entity.AlertEventSourceType;
+import com.edgecloud.alert.entity.NotificationLifecycleEventType;
 import com.edgecloud.alert.evaluation.AlertEvaluationResult;
 import com.edgecloud.alert.exception.AlertEvaluationValidationException;
 import com.edgecloud.alert.repository.AlertEventRepository;
@@ -17,9 +18,12 @@ import com.edgecloud.alert.repository.AlertEventRepository;
 public class AlertEventGenerationServiceImpl implements AlertEventGenerationService {
 
     private final AlertEventRepository repository;
+    private final AlertNotificationOutboxService outboxService;
 
-    public AlertEventGenerationServiceImpl(AlertEventRepository repository) {
+    public AlertEventGenerationServiceImpl(AlertEventRepository repository,
+                                           AlertNotificationOutboxService outboxService) {
         this.repository = repository;
+        this.outboxService = outboxService;
     }
 
     @Override
@@ -30,8 +34,9 @@ public class AlertEventGenerationServiceImpl implements AlertEventGenerationServ
         String sourceId = result.sourceId().trim();
 
         if (result.triggered()) {
+            UUID candidateId = UUID.randomUUID();
             repository.upsertOpen(
-                    UUID.randomUUID().toString(),
+                    candidateId.toString(),
                     result.ruleId().toString(),
                     result.ruleName().trim(),
                     result.projectId().toString(),
@@ -43,21 +48,26 @@ public class AlertEventGenerationServiceImpl implements AlertEventGenerationServ
                     result.operator().name(),
                     result.severity().name(),
                     result.evaluatedAt());
-            AlertEventResponse persisted = repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
+            var persistedEvent = repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
                             result.projectId(), result.ruleId(), sourceType, sourceId,
                             result.metricType(), List.of(
                                     com.edgecloud.alert.entity.AlertEventStatus.OPEN,
                                     com.edgecloud.alert.entity.AlertEventStatus.ACKNOWLEDGED))
-                    .map(AlertEventResponse::from)
                     .orElseThrow(() -> new IllegalStateException("Active alert event was not available after upsert"));
-            return Optional.of(persisted);
+            if (candidateId.equals(persistedEvent.getId())) {
+                outboxService.enqueue(persistedEvent, NotificationLifecycleEventType.OPENED,
+                        persistedEvent.getTriggeredAt());
+            }
+            return Optional.of(AlertEventResponse.from(persistedEvent));
         }
 
         return repository.findActiveForUpdate(
                         result.projectId(), result.ruleId(), sourceType, sourceId, result.metricType())
                 .map(event -> {
                     event.resolve(result.evaluatedAt());
-                    return AlertEventResponse.from(repository.save(event));
+                    var saved = repository.save(event);
+                    outboxService.enqueue(saved, NotificationLifecycleEventType.RESOLVED, saved.getResolvedAt());
+                    return AlertEventResponse.from(saved);
                 });
     }
 

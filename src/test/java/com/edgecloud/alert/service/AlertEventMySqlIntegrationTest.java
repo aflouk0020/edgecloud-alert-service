@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -35,6 +38,14 @@ import com.edgecloud.alert.evaluation.AlertEvaluationResult;
 import com.edgecloud.alert.evaluation.AlertEvaluationSourceType;
 import com.edgecloud.alert.repository.AlertEventRepository;
 import com.edgecloud.alert.repository.AlertEventOwnershipHistoryRepository;
+import com.edgecloud.alert.repository.AlertNotificationOutboxRepository;
+import com.edgecloud.alert.entity.NotificationLifecycleEventType;
+import com.edgecloud.alert.entity.AlertNotificationOutboxStatus;
+import com.edgecloud.alert.client.AlertLifecycleNotificationResponse;
+import com.edgecloud.alert.client.NotificationLifecycleClientException;
+import com.edgecloud.alert.config.NotificationServiceProperties;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import com.edgecloud.alert.repository.AlertEventSpecifications;
 import com.edgecloud.alert.exception.AlertOwnershipConflictException;
 
@@ -88,9 +99,19 @@ class AlertEventMySqlIntegrationTest {
     @Autowired
     private AlertOwnershipService ownershipService;
 
+    @Autowired
+    private AlertNotificationOutboxRepository outboxRepository;
+
+    @Autowired
+    private AlertNotificationOutboxTransactions outboxTransactions;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @BeforeEach
     void clearEvents() {
         historyRepository.deleteAll();
+        outboxRepository.deleteAll();
         repository.deleteAll();
     }
 
@@ -216,6 +237,112 @@ class AlertEventMySqlIntegrationTest {
         assertThat(events.getFirst().getOpenMarker()).isEqualTo(1);
         assertThat(events.getFirst().getLastObservedAt()).isEqualTo(BASE_TIME);
         assertThat(events.getFirst().getResolvedAt()).isNull();
+        assertThat(outboxRepository.countByAlertEventIdAndEventType(
+                events.getFirst().getId(), NotificationLifecycleEventType.OPENED)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentPublisherClaimsReturnOneCopyOfOneOutboxRow() throws Exception {
+        generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            List<Future<Integer>> claims = List.of(
+                    executor.submit(() -> claimAfterLatch(ready, start)),
+                    executor.submit(() -> claimAfterLatch(ready, start)));
+            ready.await();
+            start.countDown();
+            assertThat(claims.get(0).get() + claims.get(1).get()).isEqualTo(1);
+        }
+        assertThat(outboxRepository.findAll()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getAttemptCount()).isEqualTo(1);
+                    assertThat(item.getSourceEventId()).isEqualTo(item.getId());
+                });
+    }
+
+    @Test
+    void lifecycleAndOutboxRollbackTogether() {
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> transaction.executeWithoutResult(ignored -> {
+            generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+            throw new IllegalStateException("force rollback");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(repository.count()).isZero();
+        assertThat(outboxRepository.count()).isZero();
+    }
+
+    @Test
+    void staleProcessingRecoveryPreservesSnapshotAndAttemptCount() {
+        AlertEventResponse open = generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        UUID sourceEventId = outboxRepository.findAll().getFirst().getSourceEventId();
+        assertThat(outboxTransactions.claim(BASE_TIME.plusSeconds(10), 1)).hasSize(1);
+        assertThat(outboxTransactions.recoverStale(BASE_TIME.plusSeconds(311), Duration.ofMinutes(5))).isEqualTo(1);
+        assertThat(outboxRepository.findAll()).singleElement().satisfies(item -> {
+            assertThat(item.getStatus()).isEqualTo(AlertNotificationOutboxStatus.RETRY_SCHEDULED);
+            assertThat(item.getAttemptCount()).isEqualTo(1);
+            assertThat(item.getSourceEventId()).isEqualTo(sourceEventId);
+            assertThat(item.getAlertEventId()).isEqualTo(open.alertId());
+        });
+    }
+
+    @Test
+    void notificationFailureDoesNotRollbackOpenedOrResolvedAndLaterSuccessPublishes() {
+        AlertEventResponse open = generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        Instant publishAt = BASE_TIME.plusSeconds(600);
+        publisher(request -> { throw new NotificationLifecycleClientException(
+                true, "CONNECTION", "unavailable", null); }, publishAt).publishDue();
+
+        assertThat(repository.findById(open.alertId())).isPresent();
+        assertThat(outboxRepository.findAll()).singleElement()
+                .satisfies(item -> assertThat(item.getStatus())
+                        .isEqualTo(AlertNotificationOutboxStatus.RETRY_SCHEDULED));
+        publisher(request -> new AlertLifecycleNotificationResponse(
+                request.sourceEventId(), 1, 1, 1, true), publishAt.plusSeconds(31)).publishDue();
+        assertThat(outboxRepository.findAll()).singleElement()
+                .satisfies(item -> assertThat(item.getStatus()).isEqualTo(AlertNotificationOutboxStatus.PUBLISHED));
+
+        generationService.process(result(RULE_ID, false, BASE_TIME.plusSeconds(700))).orElseThrow();
+        publisher(request -> { throw new NotificationLifecycleClientException(
+                true, "HTTP_503", "unavailable", null); }, publishAt.plusSeconds(101)).publishDue();
+        assertThat(repository.findById(open.alertId()).orElseThrow().getStatus()).isEqualTo(AlertEventStatus.RESOLVED);
+        assertThat(outboxRepository.findAll()).filteredOn(item ->
+                item.getEventType() == NotificationLifecycleEventType.RESOLVED).singleElement()
+                .satisfies(item -> assertThat(item.getStatus())
+                        .isEqualTo(AlertNotificationOutboxStatus.RETRY_SCHEDULED));
+        publisher(request -> new AlertLifecycleNotificationResponse(
+                request.sourceEventId(), 1, 1, 1, false), publishAt.plusSeconds(132)).publishDue();
+        assertThat(outboxRepository.findAll()).allSatisfy(item ->
+                assertThat(item.getStatus()).isEqualTo(AlertNotificationOutboxStatus.PUBLISHED));
+    }
+
+    @Test
+    void acknowledgementReplayReleaseAndReackProduceOnlyGenuineAcknowledgedEvents() {
+        UUID ownerId = UUID.randomUUID();
+        AlertEventResponse open = generationService.process(result(RULE_ID, true, BASE_TIME)).orElseThrow();
+        ownershipService.acknowledge(PROJECT_ID, open.alertId(), ownerId, "owner");
+        ownershipService.acknowledge(PROJECT_ID, open.alertId(), ownerId, "ignored replay label");
+        assertThat(outboxRepository.countByAlertEventIdAndEventType(
+                open.alertId(), NotificationLifecycleEventType.ACKNOWLEDGED)).isEqualTo(1);
+        ownershipService.release(PROJECT_ID, open.alertId(), ownerId);
+        assertThat(outboxRepository.count()).isEqualTo(2);
+        ownershipService.acknowledge(PROJECT_ID, open.alertId(), ownerId, "owner");
+        assertThat(outboxRepository.countByAlertEventIdAndEventType(
+                open.alertId(), NotificationLifecycleEventType.ACKNOWLEDGED)).isEqualTo(2);
+    }
+
+    private AlertNotificationOutboxPublisher publisher(
+            com.edgecloud.alert.client.NotificationLifecycleClient client, Instant instant) {
+        return new AlertNotificationOutboxPublisher(outboxTransactions, client,
+                new NotificationServiceProperties("http://localhost", "key", true, Duration.ofSeconds(5),
+                        50, Duration.ofMinutes(5), Duration.ofSeconds(1), Duration.ofSeconds(1)),
+                Clock.fixed(instant, ZoneOffset.UTC));
+    }
+
+    private int claimAfterLatch(CountDownLatch ready, CountDownLatch start) throws InterruptedException {
+        ready.countDown();
+        start.await();
+        return outboxTransactions.claim(Instant.now(), 1).size();
     }
 
     @Test

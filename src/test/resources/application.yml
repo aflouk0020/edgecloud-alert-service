@@ -20,5 +20,7 @@ eureka:
     fetch-registry: false
 
 edgecloud:
+  notification:
+    publisher-enabled: false
   alert:
     high-latency-threshold-ms: 1000
