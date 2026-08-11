@@ -31,8 +31,21 @@ public record AlertEventResponse(
         String ownerDisplayName,
         Instant acknowledgedAt,
         Instant ownershipChangedAt,
+        int escalationLevel,
+        Instant escalatedAt,
         Instant createdAt,
         Instant updatedAt) {
+
+    public AlertEventResponse(UUID alertId, UUID alertRuleId, String alertRuleName, UUID projectId,
+            AlertEventSourceType sourceType, String sourceId, AlertRuleMetricType metricType,
+            BigDecimal observedValue, BigDecimal thresholdValue, AlertRuleComparisonOperator comparisonOperator,
+            Severity severity, AlertEventStatus status, Instant triggeredAt, Instant lastObservedAt,
+            Instant resolvedAt, UUID ownerUserId, String ownerDisplayName, Instant acknowledgedAt,
+            Instant ownershipChangedAt, Instant createdAt, Instant updatedAt) {
+        this(alertId,alertRuleId,alertRuleName,projectId,sourceType,sourceId,metricType,observedValue,
+                thresholdValue,comparisonOperator,severity,status,triggeredAt,lastObservedAt,resolvedAt,
+                ownerUserId,ownerDisplayName,acknowledgedAt,ownershipChangedAt,0,null,createdAt,updatedAt);
+    }
 
     public static AlertEventResponse from(AlertEvent event) {
         return new AlertEventResponse(
@@ -42,6 +55,7 @@ public record AlertEventResponse(
                 event.getTriggeredAt(), event.getLastObservedAt(), event.getResolvedAt(),
                 event.getOwnerUserId(), event.getOwnerDisplayName(), event.getAcknowledgedAt(),
                 event.getOwnershipChangedAt(),
+                event.getEscalationLevel(), event.getEscalatedAt(),
                 event.getCreatedAt(), event.getUpdatedAt());
     }
 }

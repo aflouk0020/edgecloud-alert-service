@@ -20,4 +20,7 @@ public class AlertNotificationOutboxService {
     public AlertNotificationOutbox enqueue(AlertEvent event, NotificationLifecycleEventType type, Instant occurredAt) {
         return repository.save(new AlertNotificationOutbox(event, type, occurredAt));
     }
+    public AlertNotificationOutbox enqueueEscalation(AlertEvent event, int level, String reason, Instant occurredAt) {
+        return repository.save(new AlertNotificationOutbox(event, level, reason, occurredAt));
+    }
 }

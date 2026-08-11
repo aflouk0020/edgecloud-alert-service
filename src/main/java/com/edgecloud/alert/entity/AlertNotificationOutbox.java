@@ -81,6 +81,8 @@ public class AlertNotificationOutbox {
     @Column(name = "processing_started_at") private Instant processingStartedAt;
     @Column(name = "failure_category", length = 64) private String failureCategory;
     @Column(name = "failure_message", length = 1000) private String failureMessage;
+    @Column(name = "escalation_level") private Integer escalationLevel;
+    @Column(name = "escalation_reason", length = 64) private String escalationReason;
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
 
@@ -104,6 +106,12 @@ public class AlertNotificationOutbox {
         this.status = AlertNotificationOutboxStatus.PENDING;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
+    }
+
+    public AlertNotificationOutbox(AlertEvent event, int level, String reason, Instant occurredAt) {
+        this(event, NotificationLifecycleEventType.ESCALATED, occurredAt);
+        escalationLevel = level;
+        escalationReason = reason;
     }
 
     public void claim(Instant now) {
@@ -170,4 +178,6 @@ public class AlertNotificationOutbox {
     public String getFailureMessage() { return failureMessage; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public Integer getEscalationLevel() { return escalationLevel; }
+    public String getEscalationReason() { return escalationReason; }
 }

@@ -36,6 +36,10 @@ management:
   endpoint:
     health:
       show-details: always
+alert:
+  escalation:
+    poll-interval-ms: ${ALERT_ESCALATION_POLL_INTERVAL_MS:30000}
+    batch-size: ${ALERT_ESCALATION_BATCH_SIZE:100}
 edgecloud:
   security:
     jwt-secret: ${EDGECLOUD_JWT_SECRET:edgecloud-monitor-development-secret-key-for-jwt-token-generation}

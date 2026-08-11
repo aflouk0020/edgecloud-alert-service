@@ -1,0 +1,10 @@
+ALTER TABLE alert_events ADD COLUMN escalation_level INT NOT NULL DEFAULT 0;
+ALTER TABLE alert_events ADD COLUMN escalated_at TIMESTAMP(6) NULL;
+CREATE TABLE escalation_policies (id CHAR(36) PRIMARY KEY,project_id CHAR(36) NOT NULL,name VARCHAR(200) NOT NULL,enabled BOOLEAN NOT NULL,created_at TIMESTAMP(6) NOT NULL,updated_at TIMESTAMP(6) NOT NULL,CONSTRAINT uk_escalation_policy_project UNIQUE(project_id));
+CREATE TABLE escalation_policy_levels (id CHAR(36) PRIMARY KEY,policy_id CHAR(36) NOT NULL,level_number INT NOT NULL,elapsed_seconds BIGINT NOT NULL,target_severity VARCHAR(16) NOT NULL,enabled BOOLEAN NOT NULL,CONSTRAINT uk_escalation_policy_level UNIQUE(policy_id,level_number),CONSTRAINT fk_escalation_level_policy FOREIGN KEY(policy_id) REFERENCES escalation_policies(id) ON DELETE CASCADE,CONSTRAINT chk_escalation_level_number CHECK(level_number>0),CONSTRAINT chk_escalation_elapsed CHECK(elapsed_seconds>0));
+CREATE TABLE alert_escalation_history (id CHAR(36) PRIMARY KEY,alert_event_id CHAR(36) NOT NULL,project_id CHAR(36) NOT NULL,policy_id CHAR(36) NOT NULL,level_number INT NOT NULL,previous_severity VARCHAR(16) NOT NULL,resulting_severity VARCHAR(16) NOT NULL,reason VARCHAR(32) NOT NULL,escalated_at TIMESTAMP(6) NOT NULL,CONSTRAINT uk_alert_escalation_level UNIQUE(alert_event_id,level_number),CONSTRAINT fk_escalation_history_alert FOREIGN KEY(alert_event_id) REFERENCES alert_events(id),CONSTRAINT fk_escalation_history_policy FOREIGN KEY(policy_id) REFERENCES escalation_policies(id));
+CREATE INDEX idx_escalation_history_project_alert ON alert_escalation_history(project_id,alert_event_id,escalated_at);
+ALTER TABLE alert_notification_outbox ADD COLUMN escalation_level INT NULL;
+ALTER TABLE alert_notification_outbox ADD COLUMN escalation_reason VARCHAR(64) NULL;
+ALTER TABLE alert_notification_outbox DROP CONSTRAINT chk_alert_notification_event_type;
+ALTER TABLE alert_notification_outbox ADD CONSTRAINT chk_alert_notification_event_type CHECK(event_type IN('OPENED','ACKNOWLEDGED','RESOLVED','ESCALATED'));
