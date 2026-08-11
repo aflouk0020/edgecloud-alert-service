@@ -40,6 +40,13 @@ public class AlertRuleAuthorizationService {
         requireMutation(projectId, authentication, null);
     }
 
+    public void requireAdminMutation(UUID projectId, Authentication authentication) {
+        ProjectWorkspaceResponse workspace = workspace(projectId, authentication);
+        if (!isAdmin(authentication) && !"PROJECT_ADMIN".equals(workspace.callerProjectRole())) {
+            throw new ProjectAccessDeniedException("Project administrator access required");
+        }
+    }
+
     private ProjectWorkspaceResponse workspace(UUID projectId, Authentication authentication) {
         if (!(authentication instanceof EdgeCloudJwtAuthenticationToken token)) {
             throw new ProjectAccessDeniedException("Access denied");

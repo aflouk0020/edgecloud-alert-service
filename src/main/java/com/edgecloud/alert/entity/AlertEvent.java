@@ -103,6 +103,12 @@ public class AlertEvent {
     @Column(name = "ownership_changed_at")
     private Instant ownershipChangedAt;
 
+    @Column(name = "escalation_level", nullable = false)
+    private int escalationLevel;
+
+    @Column(name = "escalated_at")
+    private Instant escalatedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -152,6 +158,13 @@ public class AlertEvent {
         updatedAt = changedAt;
     }
 
+    public void escalate(int level, Severity targetSeverity, Instant at) {
+        if (targetSeverity.ordinal() > severity.ordinal()) severity = targetSeverity;
+        escalationLevel = level;
+        escalatedAt = at;
+        updatedAt = at;
+    }
+
     public UUID getId() { return id; }
     public UUID getAlertRuleId() { return alertRuleId; }
     public String getAlertRuleName() { return alertRuleName; }
@@ -171,6 +184,8 @@ public class AlertEvent {
     public String getOwnerDisplayName() { return ownerDisplayName; }
     public Instant getAcknowledgedAt() { return acknowledgedAt; }
     public Instant getOwnershipChangedAt() { return ownershipChangedAt; }
+    public int getEscalationLevel() { return escalationLevel; }
+    public Instant getEscalatedAt() { return escalatedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Integer getOpenMarker() { return openMarker; }

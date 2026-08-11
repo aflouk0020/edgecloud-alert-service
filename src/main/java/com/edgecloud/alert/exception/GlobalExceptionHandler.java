@@ -11,6 +11,9 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(EscalationPolicyValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String,Object> handleEscalationValidation(EscalationPolicyValidationException ex){return error(400,"Bad Request",ex.getMessage());}
 
     @ExceptionHandler(AlertNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
