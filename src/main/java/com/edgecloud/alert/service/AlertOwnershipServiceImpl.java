@@ -15,6 +15,7 @@ import com.edgecloud.alert.entity.AlertEvent;
 import com.edgecloud.alert.entity.AlertEventOwnershipAction;
 import com.edgecloud.alert.entity.AlertEventOwnershipHistory;
 import com.edgecloud.alert.entity.AlertEventStatus;
+import com.edgecloud.alert.entity.NotificationLifecycleEventType;
 import com.edgecloud.alert.exception.AlertNotFoundException;
 import com.edgecloud.alert.exception.AlertOwnershipConflictException;
 import com.edgecloud.alert.exception.AlertOwnershipReleaseForbiddenException;
@@ -29,18 +30,22 @@ public class AlertOwnershipServiceImpl implements AlertOwnershipService {
     private final AlertEventRepository eventRepository;
     private final AlertEventOwnershipHistoryRepository historyRepository;
     private final Clock clock;
+    private final AlertNotificationOutboxService outboxService;
 
     @Autowired
     public AlertOwnershipServiceImpl(AlertEventRepository eventRepository,
-                                     AlertEventOwnershipHistoryRepository historyRepository) {
-        this(eventRepository, historyRepository, Clock.systemUTC());
+                                     AlertEventOwnershipHistoryRepository historyRepository,
+                                     AlertNotificationOutboxService outboxService) {
+        this(eventRepository, historyRepository, outboxService, Clock.systemUTC());
     }
 
     AlertOwnershipServiceImpl(AlertEventRepository eventRepository,
                               AlertEventOwnershipHistoryRepository historyRepository,
+                              AlertNotificationOutboxService outboxService,
                               Clock clock) {
         this.eventRepository = eventRepository;
         this.historyRepository = historyRepository;
+        this.outboxService = outboxService;
         this.clock = clock;
     }
 
@@ -64,6 +69,7 @@ public class AlertOwnershipServiceImpl implements AlertOwnershipService {
         historyRepository.save(new AlertEventOwnershipHistory(
                 saved.getId(), projectId, actorUserId, actorUserId, normalizedLabel,
                 AlertEventOwnershipAction.ACKNOWLEDGED, changedAt));
+        outboxService.enqueue(saved, NotificationLifecycleEventType.ACKNOWLEDGED, changedAt);
         return AlertEventResponse.from(saved);
     }
 

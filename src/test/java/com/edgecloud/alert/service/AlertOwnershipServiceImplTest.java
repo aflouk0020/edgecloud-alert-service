@@ -31,6 +31,7 @@ import com.edgecloud.alert.entity.AlertEventStatus;
 import com.edgecloud.alert.entity.AlertRuleComparisonOperator;
 import com.edgecloud.alert.entity.AlertRuleMetricType;
 import com.edgecloud.alert.entity.Severity;
+import com.edgecloud.alert.entity.NotificationLifecycleEventType;
 import com.edgecloud.alert.exception.AlertNotFoundException;
 import com.edgecloud.alert.exception.AlertOwnershipConflictException;
 import com.edgecloud.alert.exception.AlertOwnershipReleaseForbiddenException;
@@ -49,13 +50,14 @@ class AlertOwnershipServiceImplTest {
 
     @Mock private AlertEventRepository eventRepository;
     @Mock private AlertEventOwnershipHistoryRepository historyRepository;
+    @Mock private AlertNotificationOutboxService outboxService;
 
     private AlertOwnershipService service;
 
     @BeforeEach
     void setUp() {
         service = new AlertOwnershipServiceImpl(
-                eventRepository, historyRepository, Clock.fixed(CHANGED_AT, ZoneOffset.UTC));
+                eventRepository, historyRepository, outboxService, Clock.fixed(CHANGED_AT, ZoneOffset.UTC));
     }
 
     @Test
@@ -76,6 +78,7 @@ class AlertOwnershipServiceImplTest {
         assertThat(history.getValue().getAction()).isEqualTo(AlertEventOwnershipAction.ACKNOWLEDGED);
         assertThat(history.getValue().getActorUserId()).isEqualTo(OWNER_ID);
         assertThat(history.getValue().getOwnerUserId()).isEqualTo(OWNER_ID);
+        verify(outboxService).enqueue(event, NotificationLifecycleEventType.ACKNOWLEDGED, CHANGED_AT);
     }
 
     @Test
@@ -92,6 +95,7 @@ class AlertOwnershipServiceImplTest {
         assertThat(response.ownershipChangedAt()).isEqualTo(CHANGED_AT.minusSeconds(60));
         verify(eventRepository, never()).save(any());
         verifyNoInteractions(historyRepository);
+        verifyNoInteractions(outboxService);
     }
 
     @Test
@@ -126,6 +130,7 @@ class AlertOwnershipServiceImplTest {
         verify(historyRepository).save(history.capture());
         assertThat(history.getValue().getAction()).isEqualTo(AlertEventOwnershipAction.RELEASED);
         assertThat(history.getValue().getOwnerUserId()).isEqualTo(OWNER_ID);
+        verifyNoInteractions(outboxService);
     }
 
     @Test

@@ -46,3 +46,12 @@ edgecloud:
     evaluation:
       duplicate-maximum-size: ${ALERT_EVALUATION_DUPLICATE_MAXIMUM_SIZE:10000}
       duplicate-ttl-seconds: ${ALERT_EVALUATION_DUPLICATE_TTL_SECONDS:30}
+  notification:
+    base-url: ${EDGE_CLOUD_NOTIFICATION_URL:http://localhost:8085}
+    internal-service-key: ${EDGECLOUD_INTERNAL_SERVICE_KEY:}
+    publisher-enabled: ${ALERT_NOTIFICATION_PUBLISHER_ENABLED:true}
+    poll-interval: ${ALERT_NOTIFICATION_POLL_INTERVAL:5s}
+    batch-size: ${ALERT_NOTIFICATION_BATCH_SIZE:50}
+    stale-timeout: ${ALERT_NOTIFICATION_STALE_TIMEOUT:5m}
+    connect-timeout: ${ALERT_NOTIFICATION_CONNECT_TIMEOUT:2s}
+    read-timeout: ${ALERT_NOTIFICATION_READ_TIMEOUT:5s}
