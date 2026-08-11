@@ -22,7 +22,7 @@ import jakarta.persistence.LockModeType;
 
 public interface AlertEventRepository extends JpaRepository<AlertEvent, UUID>, JpaSpecificationExecutor<AlertEvent> {
 
-    @Query("select e.id from AlertEvent e where e.status in (com.edgecloud.alert.entity.AlertEventStatus.OPEN, com.edgecloud.alert.entity.AlertEventStatus.ACKNOWLEDGED) order by e.triggeredAt")
+    @Query("select e.id from AlertEvent e, EscalationPolicy p where p.projectId=e.projectId and p.enabled=true and e.status in (com.edgecloud.alert.entity.AlertEventStatus.OPEN, com.edgecloud.alert.entity.AlertEventStatus.ACKNOWLEDGED) order by e.triggeredAt")
     List<UUID> findActiveIds(org.springframework.data.domain.Pageable pageable);
 
     Optional<AlertEvent> findByIdAndProjectId(UUID id, UUID projectId);
