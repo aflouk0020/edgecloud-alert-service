@@ -1,0 +1,7 @@
+package com.edgecloud.alert.entity;
+import static org.assertj.core.api.Assertions.*; import java.time.*; import java.util.*; import org.junit.jupiter.api.Test;
+class MaintenanceWindowTest {private Instant start=Instant.parse("2026-08-11T10:00:00Z"),end=start.plusSeconds(60);private UUID project=UUID.randomUUID(),actor=UUID.randomUUID(),service=UUID.randomUUID();
+ @Test void usesInclusiveStartExclusiveEndAndAutomaticExpiry(){var w=window(MaintenanceScopeType.PROJECT,null,null);assertThat(w.activeAt(start.minusNanos(1))).isFalse();assertThat(w.activeAt(start)).isTrue();assertThat(w.activeAt(end.minusNanos(1))).isTrue();assertThat(w.activeAt(end)).isFalse();}
+ @Test void matchesOnlyConfiguredScope(){assertThat(window(MaintenanceScopeType.PROJECT,null,null).matches(AlertEventSourceType.DEVICE,"d")).isTrue();assertThat(window(MaintenanceScopeType.SERVICE,service,null).matches(AlertEventSourceType.SERVICE,service.toString())).isTrue();assertThat(window(MaintenanceScopeType.SERVICE,service,null).matches(AlertEventSourceType.SERVICE,UUID.randomUUID().toString())).isFalse();assertThat(window(MaintenanceScopeType.DEVICE,null,"d-1").matches(AlertEventSourceType.DEVICE,"d-1")).isTrue();assertThat(window(MaintenanceScopeType.DEVICE,null,"d-1").matches(AlertEventSourceType.DEVICE,"d-2")).isFalse();}
+ private MaintenanceWindow window(MaintenanceScopeType scope,UUID serviceId,String device){return new MaintenanceWindow(project,scope,serviceId,device,"Maintenance","Planned work",start,end,true,actor);}
+}

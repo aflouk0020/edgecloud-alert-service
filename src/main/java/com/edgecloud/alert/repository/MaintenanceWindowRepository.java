@@ -1,0 +1,3 @@
+package com.edgecloud.alert.repository;
+import java.time.Instant; import java.util.*; import org.springframework.data.jpa.repository.*; import org.springframework.data.repository.query.Param; import com.edgecloud.alert.entity.MaintenanceWindow;
+public interface MaintenanceWindowRepository extends JpaRepository<MaintenanceWindow,UUID>{List<MaintenanceWindow> findByProjectIdOrderByStartsAtDesc(UUID projectId);Optional<MaintenanceWindow> findByIdAndProjectId(UUID id,UUID projectId);@Query("select w from MaintenanceWindow w where w.projectId=:project and w.enabled=true and w.startsAt<=:at and w.endsAt>:at")List<MaintenanceWindow> findActive(@Param("project")UUID project,@Param("at")Instant at);}

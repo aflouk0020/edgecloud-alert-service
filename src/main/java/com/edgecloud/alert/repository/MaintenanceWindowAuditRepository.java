@@ -1,0 +1,1 @@
+package com.edgecloud.alert.repository; import java.util.UUID; import org.springframework.data.jpa.repository.JpaRepository; import com.edgecloud.alert.entity.MaintenanceWindowAudit; public interface MaintenanceWindowAuditRepository extends JpaRepository<MaintenanceWindowAudit,UUID>{}

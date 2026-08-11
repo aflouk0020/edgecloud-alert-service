@@ -11,6 +11,13 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(MaintenanceWindowNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String,Object> handleMaintenanceNotFound(MaintenanceWindowNotFoundException ex){return error(404,"Not Found",ex.getMessage());}
+
+    @ExceptionHandler(MaintenanceWindowValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String,Object> handleMaintenanceValidation(MaintenanceWindowValidationException ex){return error(400,"Bad Request",ex.getMessage());}
     @ExceptionHandler(EscalationPolicyValidationException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String,Object> handleEscalationValidation(EscalationPolicyValidationException ex){return error(400,"Bad Request",ex.getMessage());}

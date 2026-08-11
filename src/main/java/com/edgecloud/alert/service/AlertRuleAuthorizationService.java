@@ -47,6 +47,21 @@ public class AlertRuleAuthorizationService {
         }
     }
 
+    public UUID requireMaintenanceMutation(UUID projectId, Authentication authentication,
+            UUID serviceId, String deviceId) {
+        ProjectWorkspaceResponse workspace = workspace(projectId, authentication);
+        if (!isAdmin(authentication) && !"PROJECT_ADMIN".equals(workspace.callerProjectRole())) {
+            throw new ProjectAccessDeniedException("Project administrator access required");
+        }
+        if (serviceId != null && !workspace.serviceIds().contains(serviceId)) {
+            throw new ProjectAssociationValidationException("Service is not associated with the project");
+        }
+        if (deviceId != null && !workspace.deviceIds().contains(deviceId)) {
+            throw new ProjectAssociationValidationException("Device is not associated with the project");
+        }
+        return workspace.callerUserId();
+    }
+
     private ProjectWorkspaceResponse workspace(UUID projectId, Authentication authentication) {
         if (!(authentication instanceof EdgeCloudJwtAuthenticationToken token)) {
             throw new ProjectAccessDeniedException("Access denied");
