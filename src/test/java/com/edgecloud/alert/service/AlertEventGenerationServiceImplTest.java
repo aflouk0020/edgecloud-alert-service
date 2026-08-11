@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,7 +13,6 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -65,9 +65,8 @@ class AlertEventGenerationServiceImplTest {
                     insertedId.set(UUID.fromString(invocation.getArgument(0)));
                     return 1;
                 });
-        when(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
-                PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE, "device-1",
-                AlertRuleMetricType.CPU_USAGE, activeStatuses())).thenAnswer(invocation -> {
+        when(repository.findActiveForUpdate(PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE, "device-1",
+                AlertRuleMetricType.CPU_USAGE)).thenAnswer(invocation -> {
                     ReflectionTestUtils.setField(stored, "id", insertedId.get());
                     return Optional.of(stored);
                 });
@@ -88,11 +87,20 @@ class AlertEventGenerationServiceImplTest {
     }
 
     @Test
+    void suppressedTriggeredConditionCreatesNoAlertOrNotificationOutbox() {
+        AlertSuppressionService suppression = mock(AlertSuppressionService.class);
+        AlertEvaluationResult result = result(true, AlertEvaluationSourceType.DEVICE, "device-1", FIRST_OBSERVED);
+        when(suppression.suppressMatching(result)).thenReturn(1);
+        var suppressedService = new AlertEventGenerationServiceImpl(repository, outboxService, suppression);
+        assertThat(suppressedService.process(result)).isEmpty();
+        verifyNoInteractions(repository, outboxService);
+    }
+
+    @Test
     void repeatedTriggerUsesAtomicUpsertAndUpdatesLastObservation() {
         Instant later = FIRST_OBSERVED.plusSeconds(60);
-        when(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
-                eq(PROJECT_ID), eq(RULE_ID), eq(AlertEventSourceType.DEVICE), eq("device-1"),
-                eq(AlertRuleMetricType.CPU_USAGE), eq(activeStatuses())))
+        when(repository.findActiveForUpdate(eq(PROJECT_ID), eq(RULE_ID), eq(AlertEventSourceType.DEVICE),
+                eq("device-1"), eq(AlertRuleMetricType.CPU_USAGE)))
                 .thenReturn(Optional.of(event(AlertEventStatus.OPEN, "device-1", FIRST_OBSERVED)))
                 .thenReturn(Optional.of(event(AlertEventStatus.OPEN, "device-1", later)));
 
@@ -169,9 +177,8 @@ class AlertEventGenerationServiceImplTest {
         AlertEvent acknowledged = event(AlertEventStatus.ACKNOWLEDGED, "device-1", FIRST_OBSERVED);
         acknowledged.setOwnerUserId(ownerId);
         acknowledged.setAcknowledgedAt(FIRST_OBSERVED);
-        when(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
-                PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE, "device-1",
-                AlertRuleMetricType.CPU_USAGE, activeStatuses())).thenReturn(Optional.of(acknowledged));
+        when(repository.findActiveForUpdate(PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE, "device-1",
+                AlertRuleMetricType.CPU_USAGE)).thenReturn(Optional.of(acknowledged));
 
         var response = service.process(result(true, AlertEvaluationSourceType.DEVICE, "device-1",
                 FIRST_OBSERVED.plusSeconds(60))).orElseThrow();
@@ -194,9 +201,8 @@ class AlertEventGenerationServiceImplTest {
 
         Instant retriggeredAt = resolvedAt.plusSeconds(60);
         AlertEvent newOpen = event(AlertEventStatus.OPEN, "device-1", retriggeredAt);
-        when(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
-                PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE, "device-1",
-                AlertRuleMetricType.CPU_USAGE, activeStatuses())).thenReturn(Optional.of(newOpen));
+        when(repository.findActiveForUpdate(PROJECT_ID, RULE_ID, AlertEventSourceType.DEVICE,
+                "device-1", AlertRuleMetricType.CPU_USAGE)).thenReturn(Optional.of(newOpen));
 
         var response = service.process(result(true, AlertEvaluationSourceType.DEVICE, "device-1", retriggeredAt));
 
@@ -210,9 +216,8 @@ class AlertEventGenerationServiceImplTest {
         String serviceId = UUID.randomUUID().toString();
         AlertEvent stored = event(AlertEventStatus.OPEN, serviceId, FIRST_OBSERVED);
         stored.setSourceType(AlertEventSourceType.SERVICE);
-        when(repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
-                PROJECT_ID, RULE_ID, AlertEventSourceType.SERVICE, serviceId,
-                AlertRuleMetricType.CPU_USAGE, activeStatuses())).thenReturn(Optional.of(stored));
+        when(repository.findActiveForUpdate(PROJECT_ID, RULE_ID, AlertEventSourceType.SERVICE, serviceId,
+                AlertRuleMetricType.CPU_USAGE)).thenReturn(Optional.of(stored));
 
         assertThat(service.process(result(true, AlertEvaluationSourceType.SERVICE, serviceId, FIRST_OBSERVED)))
                 .get().extracting(response -> response.sourceType()).isEqualTo(AlertEventSourceType.SERVICE);
@@ -237,10 +242,6 @@ class AlertEventGenerationServiceImplTest {
                 RULE_ID, "CPU overload", PROJECT_ID, sourceType, sourceId, AlertRuleMetricType.CPU_USAGE,
                 new BigDecimal("95.25"), new BigDecimal("80.00"),
                 AlertRuleComparisonOperator.GREATER_THAN, Severity.HIGH, triggered, evaluatedAt);
-    }
-
-    private List<AlertEventStatus> activeStatuses() {
-        return List.of(AlertEventStatus.OPEN, AlertEventStatus.ACKNOWLEDGED);
     }
 
     private AlertEvent event(AlertEventStatus status, String sourceId, Instant observedAt) {

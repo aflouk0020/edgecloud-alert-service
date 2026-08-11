@@ -1,10 +1,10 @@
 package com.edgecloud.alert.service;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.edgecloud.alert.dto.AlertEventResponse;
@@ -19,11 +19,19 @@ public class AlertEventGenerationServiceImpl implements AlertEventGenerationServ
 
     private final AlertEventRepository repository;
     private final AlertNotificationOutboxService outboxService;
+    private final AlertSuppressionService suppressionService;
 
+    @Autowired
     public AlertEventGenerationServiceImpl(AlertEventRepository repository,
-                                           AlertNotificationOutboxService outboxService) {
+                                           AlertNotificationOutboxService outboxService,
+                                           AlertSuppressionService suppressionService) {
         this.repository = repository;
         this.outboxService = outboxService;
+        this.suppressionService = suppressionService;
+    }
+
+    AlertEventGenerationServiceImpl(AlertEventRepository repository, AlertNotificationOutboxService outboxService) {
+        this(repository, outboxService, null);
     }
 
     @Override
@@ -34,6 +42,9 @@ public class AlertEventGenerationServiceImpl implements AlertEventGenerationServ
         String sourceId = result.sourceId().trim();
 
         if (result.triggered()) {
+            if (suppressionService != null && suppressionService.suppressMatching(result) > 0) {
+                return Optional.empty();
+            }
             UUID candidateId = UUID.randomUUID();
             repository.upsertOpen(
                     candidateId.toString(),
@@ -48,11 +59,10 @@ public class AlertEventGenerationServiceImpl implements AlertEventGenerationServ
                     result.operator().name(),
                     result.severity().name(),
                     result.evaluatedAt());
-            var persistedEvent = repository.findByProjectIdAndAlertRuleIdAndSourceTypeAndSourceIdAndMetricTypeAndStatusIn(
-                            result.projectId(), result.ruleId(), sourceType, sourceId,
-                            result.metricType(), List.of(
-                                    com.edgecloud.alert.entity.AlertEventStatus.OPEN,
-                                    com.edgecloud.alert.entity.AlertEventStatus.ACKNOWLEDGED))
+            // A locking/current read remains visible after the maintenance lookup under MySQL REPEATABLE READ
+            // and preserves the existing concurrent ON DUPLICATE KEY generation guarantee.
+            var persistedEvent = repository.findActiveForUpdate(
+                            result.projectId(), result.ruleId(), sourceType, sourceId, result.metricType())
                     .orElseThrow(() -> new IllegalStateException("Active alert event was not available after upsert"));
             if (candidateId.equals(persistedEvent.getId())) {
                 outboxService.enqueue(persistedEvent, NotificationLifecycleEventType.OPENED,
